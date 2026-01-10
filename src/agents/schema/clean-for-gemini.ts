@@ -10,6 +10,21 @@ const UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
   "$ref",
   "$defs",
   "definitions",
+  // Conditional schema keywords (Google rejects these)
+  "if",
+  "then",
+  "else",
+  // Validation keywords that may cause JSON Schema 2020-12 validation failures
+  // when routing Claude models via Cloud Code Assist
+  "minLength",
+  "maxLength",
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "minItems",
+  "maxItems",
+  "pattern",
 ]);
 
 // Check if an anyOf/oneOf array contains only literal values that can be flattened.
@@ -209,9 +224,19 @@ function cleanSchemaForGeminiWithDefs(
         cleanSchemaForGeminiWithDefs(variant, nextDefs, refStack),
       );
     } else if (key === "allOf" && Array.isArray(value)) {
-      cleaned[key] = value.map((variant) =>
-        cleanSchemaForGeminiWithDefs(variant, nextDefs, refStack),
-      );
+      // Clean each entry, then filter out empty objects (e.g., from stripped if/then/else)
+      const cleanedAllOf = value
+        .map((variant) =>
+          cleanSchemaForGeminiWithDefs(variant, nextDefs, refStack),
+        )
+        .filter(
+          (v) =>
+            v && typeof v === "object" && Object.keys(v as object).length > 0,
+        );
+      // Only include allOf if it has meaningful entries
+      if (cleanedAllOf.length > 0) {
+        cleaned[key] = cleanedAllOf;
+      }
     } else {
       cleaned[key] = value;
     }
